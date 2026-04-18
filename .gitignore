@@ -1,0 +1,9 @@
+jarvisenv/
+vosk-model*
+*.zip
+*.onnx
+*.json
+*.wav
+__pycache__/
+*.pyc
+piper/

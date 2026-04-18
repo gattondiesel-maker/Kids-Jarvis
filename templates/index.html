@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Jarvis</title>
+
+<style>
+body {
+    background-color: #0b0f14;
+    color: #00ffd5;
+    font-family: Arial, sans-serif;
+    text-align: center;
+    margin: 0;
+    overflow: hidden;
+}
+
+h1 {
+    font-size: 3em;
+    margin-top: 60px;
+}
+
+#circle {
+    width: 200px;
+    height: 200px;
+    border: 5px solid #00ffd5;
+    border-radius: 50%;
+    margin: 30px auto;
+}
+
+.listening {
+    animation: slowPulse 2s infinite;
+}
+
+.thinking {
+    animation: fastPulse 0.7s infinite;
+}
+
+.speaking {
+    animation: glowPulse 1s infinite;
+}
+
+@keyframes slowPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.1); opacity: 0.6; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes fastPulse {
+    0% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.2); opacity: 0.3; }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes glowPulse {
+    0% { box-shadow: 0 0 10px #00ffd5; }
+    50% { box-shadow: 0 0 40px #00ffd5; }
+    100% { box-shadow: 0 0 10px #00ffd5; }
+}
+
+#status {
+    font-size: 1.5em;
+    margin-top: 20px;
+}
+
+#heard {
+    font-size: 1.1em;
+    margin-top: 20px;
+    color: #7fffe8;
+}
+
+#controls {
+    margin-top: 30px;
+}
+
+button {
+    background-color: #111a22;
+    color: #00ffd5;
+    border: 2px solid #00ffd5;
+    padding: 12px 20px;
+    margin: 8px;
+    font-size: 1em;
+    border-radius: 10px;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #16303a;
+}
+
+footer {
+    position: absolute;
+    bottom: 10px;
+    width: 100%;
+    font-size: 1em;
+    color: #00bfa6;
+}
+</style>
+</head>
+
+<body>
+
+<h1>Jarvis</h1>
+
+<div id="circle" class="listening"></div>
+
+<div id="status">{{ status }}</div>
+
+<div id="heard">Last heard: waiting...</div>
+
+<div id="controls">
+    <button onclick="runCycle()">Run Demo Cycle</button>
+    <button onclick="setState('Listening')">Listening</button>
+    <button onclick="setState('Thinking')">Thinking</button>
+    <button onclick="setState('Speaking')">Speaking</button>
+    <button onclick="simulateHeard('hello_jarvis')">Sim Hello</button>
+    <button onclick="simulateHeard('spell_cat')">Sim Spell</button>
+</div>
+
+<footer>
+    Raspberry Pi 5 + Hailo AI
+</footer>
+
+<script>
+async function refreshStatus() {
+    try {
+        const response = await fetch('/status');
+        const data = await response.json();
+
+        const statusText = data.status.toLowerCase();
+        document.getElementById('status').textContent = data.status;
+        document.getElementById('heard').textContent = "Last heard: " + (data.last_heard || "waiting...");
+
+        const circle = document.getElementById('circle');
+        circle.classList.remove("listening", "thinking", "speaking");
+
+        if (statusText.includes("thinking")) {
+            circle.classList.add("thinking");
+        } else if (statusText.includes("speaking")) {
+            circle.classList.add("speaking");
+        } else {
+            circle.classList.add("listening");
+        }
+    } catch (e) {
+        console.log("Status update failed");
+    }
+}
+
+async function setState(state) {
+    await fetch('/set_status/' + state);
+}
+
+async function runCycle() {
+    await fetch('/test_cycle');
+}
+
+async function simulateHeard(phrase) {
+    await fetch('/simulate_heard/' + phrase);
+}
+
+setInterval(refreshStatus, 500);
+</script>
+
+</body>
+</html>
