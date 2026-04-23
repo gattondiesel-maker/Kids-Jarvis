@@ -4,8 +4,7 @@
 
 <title>Jarvis Remote</title>
 
-<meta name="viewport"
-content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 
@@ -25,6 +24,28 @@ html, body {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+    text-align: center;
+}
+
+h1 {
+    margin-bottom: 10px;
+}
+
+#hint {
+    margin-bottom: 20px;
+    color: #7fffe8;
+}
+
+#state {
+    font-size: 1.5em;
+    margin-bottom: 20px;
+}
+
+#heard, #reply {
+    margin-top: 10px;
+    width: 85%;
+    max-width: 700px;
+    word-wrap: break-word;
 }
 
 </style>
@@ -37,10 +58,10 @@ html, body {
 
 <h1>JARVIS REMOTE</h1>
 
-<p>
+<div id="hint">
 Hold to talk<br>
 Tap to stop
-</p>
+</div>
 
 <div id="state">
 Listening...
@@ -53,6 +74,8 @@ Last heard: waiting...
 <div id="reply">
 Last reply: waiting...
 </div>
+
+<audio id="replyPlayer"></audio>
 
 </div>
 
@@ -96,6 +119,22 @@ async function refreshStatus() {
 
 }
 
+async function stopJarvis() {
+
+    try {
+
+        await fetch('/stop');
+
+    }
+
+    catch (e) {
+
+        console.log('Stop failed');
+
+    }
+
+}
+
 async function startRecording() {
 
     try {
@@ -127,7 +166,7 @@ async function startRecording() {
 
     catch (e) {
 
-        console.log('Mic start failed');
+        console.log('Mic start failed', e);
 
         document.getElementById('state').textContent =
         'Mic permission denied';
@@ -166,11 +205,17 @@ async function stopRecordingAndUpload() {
                 });
 
                 document.getElementById('state').textContent =
-                'Uploaded';
+                'Processing...';
+
+                await waitForJarvisToFinish();
+
+                await playLatestReply();
 
             }
 
             catch (e) {
+
+                console.log('Upload failed', e);
 
                 document.getElementById('state').textContent =
                 'Upload failed';
@@ -181,6 +226,8 @@ async function stopRecordingAndUpload() {
 
                 streamRef.getTracks()
                 .forEach(track => track.stop());
+
+                streamRef = null;
 
             }
 
@@ -196,17 +243,55 @@ async function stopRecordingAndUpload() {
 
 }
 
-async function stopJarvis() {
+async function waitForJarvisToFinish() {
+
+    for (let i = 0; i < 60; i++) {
+
+        try {
+
+            const response =
+            await fetch('/status');
+
+            const data =
+            await response.json();
+
+            if (!data.is_busy) {
+                return;
+            }
+
+        }
+
+        catch (e) {
+
+            console.log('Status poll failed');
+
+        }
+
+        await new Promise(resolve =>
+            setTimeout(resolve, 500)
+        );
+
+    }
+
+}
+
+async function playLatestReply() {
 
     try {
 
-        await fetch('/stop');
+        const player =
+        document.getElementById('replyPlayer');
+
+        player.src =
+        '/reply_audio?t=' + Date.now();
+
+        await player.play();
 
     }
 
     catch (e) {
 
-        console.log('Stop failed');
+        console.log('Playback failed', e);
 
     }
 
@@ -282,6 +367,13 @@ startPress
 touchArea.addEventListener(
 'mouseup',
 endPress
+);
+
+touchArea.addEventListener(
+'mouseleave',
+() => {
+    clearTimeout(pressTimer);
+}
 );
 
 setInterval(refreshStatus, 500);

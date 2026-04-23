@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, send_file
 import threading
 import time
 import subprocess
@@ -19,6 +19,8 @@ MAX_MEMORY = 6
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
 OLLAMA_MODEL = "qwen2.5:1.5b"
+
+REPLY_AUDIO_PATH = "/home/jarvis/jarvis/static/jarvis_reply.wav"
 
 SYSTEM_PROMPT = """
 You are Jarvis, a friendly offline family assistant.
@@ -73,6 +75,23 @@ def speak(text):
     current_process = subprocess.Popen(command)
     current_process.wait()
     current_process = None
+
+
+def speak_to_file(text, output_path):
+    safe_text = text.replace("'", "").replace('"', "")
+
+    command = [
+        "bash",
+        "-c",
+        f"echo '{safe_text}' | "
+        f"~/piper/build/piper "
+        f"--model ~/jarvis/en_US-lessac-medium.onnx "
+        f"--config ~/jarvis/en_US-lessac-medium.onnx.json "
+        f"--espeak_data ~/piper/build/pi/share/espeak-ng-data "
+        f"--output_file '{output_path}'"
+    ]
+
+    subprocess.run(command, check=False)
 
 
 def spell_word(word):
@@ -162,6 +181,9 @@ def run_command_cycle(command_text):
         reply = ask_llm(command_text)
         last_reply = reply
 
+        reply_text = reply if reply else "Sorry, I did not get that."
+        speak_to_file(reply_text, REPLY_AUDIO_PATH)
+
         current_status = "Speaking..."
 
         if reply.upper().startswith("SPELL:"):
@@ -177,11 +199,14 @@ def run_command_cycle(command_text):
                 if possible_topic:
                     last_topic = possible_topic
 
-            speak(reply if reply else "Sorry, I did not get that.")
+            speak(reply_text)
 
     except Exception as e:
         current_status = "Speaking..."
-        speak("Sorry, I had trouble thinking just then.")
+        error_text = "Sorry, I had trouble thinking just then."
+        last_reply = error_text
+        speak_to_file(error_text, REPLY_AUDIO_PATH)
+        speak(error_text)
         print("LLM error:", e)
 
     time.sleep(0.2)
@@ -236,21 +261,105 @@ def stop_route():
 
 @app.route("/upload_audio", methods=["POST"])
 def upload_audio():
+
     audio = request.files.get("audio")
 
     if not audio:
         return jsonify({"ok": False})
 
-    save_path = "/tmp/jarvis_remote.webm"
-    audio.save(save_path)
+    webm_path = "/tmp/jarvis_remote.webm"
+    wav_path = "/tmp/jarvis_remote.wav"
+
+    audio.save(webm_path)
+
+    # Convert webm ? wav (16k mono)
+    os.system(
+        f"ffmpeg -y -i {webm_path} "
+        f"-ar 16000 -ac 1 -f wav {wav_path}"
+    )
+
+    try:
+        from vosk import Model, KaldiRecognizer
+        import wave
+        import json
+
+        model = Model("vosk-model-small-en-us-0.15")
+
+        wf = wave.open(wav_path, "rb")
+
+        recognizer = KaldiRecognizer(
+            model,
+            wf.getframerate()
+        )
+
+        text_result = ""
+
+        while True:
+
+            data = wf.readframes(4000)
+
+            if len(data) == 0:
+                break
+
+            if recognizer.AcceptWaveform(data):
+
+                result = json.loads(
+                    recognizer.Result()
+                )
+
+                text_result += result.get(
+                    "text",
+                    ""
+                )
+
+        final_result = json.loads(
+            recognizer.FinalResult()
+        )
+
+        text_result += final_result.get(
+            "text",
+            ""
+        )
+
+        text_result = text_result.strip()
+
+        if text_result:
+
+            run_command_cycle(text_result)
+
+        else:
+
+            run_command_cycle(
+                "Sorry I did not hear anything"
+            )
+
+    except Exception as e:
+
+        print("Speech error:", e)
+
+        run_command_cycle(
+            "Speech processing failed"
+        )
 
     return jsonify({"ok": True})
+
+@app.route("/reply_audio")
+def reply_audio():
+    if os.path.exists(REPLY_AUDIO_PATH):
+        return send_file(REPLY_AUDIO_PATH, mimetype="audio/wav")
+    return jsonify({"ok": False}), 404
 
 
 @app.route("/remote")
 def remote():
     return render_template("remote.html")
 
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(
+        host="0.0.0.0",
+        port=5000,
+        ssl_context=(
+            "/home/jarvis/jarvis/cert.pem",
+            "/home/jarvis/jarvis/key.pem"
+        )
+    )
