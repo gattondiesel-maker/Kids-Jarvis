@@ -7,3 +7,10 @@ vosk-model*
 __pycache__/
 *.pyc
 piper/
+jarvisenv/
+__pycache__/
+*.pyc
+*.wav
+*.webm
+*.save
+/tmp/
