@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify
+from flask import Flask, render_template, jsonify, request
 import threading
 import time
 import subprocess
@@ -12,8 +12,8 @@ last_heard = ""
 is_busy = False
 current_process = None
 last_topic = ""
+last_reply = ""
 
-# Short-term conversation memory
 conversation_memory = []
 MAX_MEMORY = 6
 
@@ -52,6 +52,7 @@ def stop_speaking():
     current_status = "Listening..."
     is_busy = False
 
+
 def speak(text):
     global current_process
 
@@ -72,6 +73,7 @@ def speak(text):
     current_process = subprocess.Popen(command)
     current_process.wait()
     current_process = None
+
 
 def spell_word(word):
     speak(f"The spelling of {word} is")
@@ -134,8 +136,9 @@ def ask_llm(user_text):
 
     return reply
 
+
 def run_command_cycle(command_text):
-    global current_status, last_heard, is_busy, last_topic
+    global current_status, last_heard, is_busy, last_topic, last_reply
 
     cleaned = command_text.lower().strip()
 
@@ -150,7 +153,6 @@ def run_command_cycle(command_text):
     last_heard = command_text
     current_status = "Thinking..."
 
-    # lightweight follow-up helper
     if "spell it" in cleaned or "how do you spell it" in cleaned:
         if last_topic:
             command_text = f"How do you spell {last_topic}?"
@@ -158,6 +160,7 @@ def run_command_cycle(command_text):
 
     try:
         reply = ask_llm(command_text)
+        last_reply = reply
 
         current_status = "Speaking..."
 
@@ -169,7 +172,6 @@ def run_command_cycle(command_text):
             else:
                 speak("Please tell me the word you want help spelling.")
         else:
-            # remember likely topic from simple "what is X" style questions
             if cleaned.startswith("what is "):
                 possible_topic = cleaned.replace("what is ", "").strip(" ?.")
                 if possible_topic:
@@ -186,16 +188,20 @@ def run_command_cycle(command_text):
     current_status = "Listening..."
     is_busy = False
 
+@app.route("/")
 def home():
     return render_template("index.html", status=current_status)
+
 
 @app.route("/status")
 def status():
     return jsonify({
         "status": current_status,
         "last_heard": last_heard,
+        "last_reply": last_reply,
         "is_busy": is_busy
     })
+
 
 @app.route("/set_status/<new_status>")
 def set_status(new_status):
@@ -205,6 +211,7 @@ def set_status(new_status):
         "ok": True,
         "status": current_status
     })
+
 
 @app.route("/simulate_heard/<phrase>")
 def simulate_heard(phrase):
@@ -220,10 +227,30 @@ def simulate_heard(phrase):
         "heard": phrase
     })
 
+
 @app.route("/stop", methods=["GET"])
 def stop_route():
     stop_speaking()
     return jsonify({"ok": True})
+
+
+@app.route("/upload_audio", methods=["POST"])
+def upload_audio():
+    audio = request.files.get("audio")
+
+    if not audio:
+        return jsonify({"ok": False})
+
+    save_path = "/tmp/jarvis_remote.webm"
+    audio.save(save_path)
+
+    return jsonify({"ok": True})
+
+
+@app.route("/remote")
+def remote():
+    return render_template("remote.html")
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

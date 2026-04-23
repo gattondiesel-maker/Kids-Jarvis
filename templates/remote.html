@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<title>Jarvis Remote</title>
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0">
+
+<style>
+
+html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: #0b0f14;
+    color: #00ffd5;
+    font-family: Arial, sans-serif;
+}
+
+#touchArea {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="touchArea">
+
+<h1>JARVIS REMOTE</h1>
+
+<p>
+Hold to talk<br>
+Tap to stop
+</p>
+
+<div id="state">
+Listening...
+</div>
+
+<div id="heard">
+Last heard: waiting...
+</div>
+
+<div id="reply">
+Last reply: waiting...
+</div>
+
+</div>
+
+<script>
+
+let pressTimer = null;
+let isHolding = false;
+
+let mediaRecorder = null;
+let audioChunks = [];
+let streamRef = null;
+
+async function refreshStatus() {
+
+    try {
+
+        const response =
+        await fetch('/status');
+
+        const data =
+        await response.json();
+
+        document.getElementById('state').textContent =
+        data.status || 'Listening...';
+
+        document.getElementById('heard').textContent =
+        'Last heard: ' +
+        (data.last_heard || 'waiting...');
+
+        document.getElementById('reply').textContent =
+        'Last reply: ' +
+        (data.last_reply || 'waiting...');
+
+    }
+
+    catch (e) {
+
+        console.log('Status refresh failed');
+
+    }
+
+}
+
+async function startRecording() {
+
+    try {
+
+        streamRef =
+        await navigator.mediaDevices.getUserMedia({
+            audio: true
+        });
+
+        audioChunks = [];
+
+        mediaRecorder =
+        new MediaRecorder(streamRef);
+
+        mediaRecorder.ondataavailable =
+        (event) => {
+
+            if (event.data.size > 0) {
+
+                audioChunks.push(event.data);
+
+            }
+
+        };
+
+        mediaRecorder.start();
+
+    }
+
+    catch (e) {
+
+        console.log('Mic start failed');
+
+        document.getElementById('state').textContent =
+        'Mic permission denied';
+
+    }
+
+}
+
+async function stopRecordingAndUpload() {
+
+    if (!mediaRecorder) return;
+
+    return new Promise((resolve) => {
+
+        mediaRecorder.onstop =
+        async () => {
+
+            const audioBlob =
+            new Blob(audioChunks,
+            { type: 'audio/webm' });
+
+            const formData =
+            new FormData();
+
+            formData.append(
+                'audio',
+                audioBlob,
+                'remote.webm'
+            );
+
+            try {
+
+                await fetch('/upload_audio', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                document.getElementById('state').textContent =
+                'Uploaded';
+
+            }
+
+            catch (e) {
+
+                document.getElementById('state').textContent =
+                'Upload failed';
+
+            }
+
+            if (streamRef) {
+
+                streamRef.getTracks()
+                .forEach(track => track.stop());
+
+            }
+
+            mediaRecorder = null;
+
+            resolve();
+
+        };
+
+        mediaRecorder.stop();
+
+    });
+
+}
+
+async function stopJarvis() {
+
+    try {
+
+        await fetch('/stop');
+
+    }
+
+    catch (e) {
+
+        console.log('Stop failed');
+
+    }
+
+}
+
+function startPress() {
+
+    isHolding = false;
+
+    pressTimer =
+    setTimeout(async () => {
+
+        isHolding = true;
+
+        document.getElementById('state').textContent =
+        'Recording...';
+
+        await startRecording();
+
+    }, 300);
+
+}
+
+async function endPress() {
+
+    clearTimeout(pressTimer);
+
+    if (!isHolding) {
+
+        stopJarvis();
+
+    }
+
+    else {
+
+        isHolding = false;
+
+        document.getElementById('state').textContent =
+        'Uploading...';
+
+        await stopRecordingAndUpload();
+
+    }
+
+}
+
+const touchArea =
+document.getElementById('touchArea');
+
+touchArea.addEventListener(
+'touchstart',
+(e) => {
+    e.preventDefault();
+    startPress();
+},
+{ passive: false }
+);
+
+touchArea.addEventListener(
+'touchend',
+(e) => {
+    e.preventDefault();
+    endPress();
+},
+{ passive: false }
+);
+
+touchArea.addEventListener(
+'mousedown',
+startPress
+);
+
+touchArea.addEventListener(
+'mouseup',
+endPress
+);
+
+setInterval(refreshStatus, 500);
+
+refreshStatus();
+
+</script>
+
+</body>
+</html>
+
+
