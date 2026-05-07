@@ -18,7 +18,7 @@ conversation_memory = []
 MAX_MEMORY = 6
 
 OLLAMA_URL = "http://127.0.0.1:11434/api/generate"
-OLLAMA_MODEL = "qwen2.5:1.5b"
+OLLAMA_MODEL = "qwen2.5:3b"
 
 REPLY_AUDIO_PATH = "/home/jarvis/jarvis/static/jarvis_reply.wav"
 
@@ -181,6 +181,9 @@ def run_command_cycle(command_text):
         reply = ask_llm(command_text)
         last_reply = reply
 
+        print("\nUser:", command_text, flush=True)
+        print("Jarvis:", reply if reply else "Sorry, I did not get that.", "\n", flush=True)
+
         reply_text = reply if reply else "Sorry, I did not get that."
         speak_to_file(reply_text, REPLY_AUDIO_PATH)
 
@@ -283,7 +286,7 @@ def upload_audio():
         import wave
         import json
 
-        model = Model("vosk-model-small-en-us-0.15")
+        model = Model("vosk-model-en-us-0.22")
 
         wf = wave.open(wav_path, "rb")
 

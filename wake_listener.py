@@ -1,3 +1,6 @@
+import urllib3
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 import queue
 import sounddevice as sd
 import json
@@ -9,13 +12,13 @@ from vosk import Model as VoskModel, KaldiRecognizer
 
 SAMPLE_RATE = 16000
 AUDIO_BLOCKSIZE = 1280
-SESSION_TIMEOUT_SECONDS = 6
+SESSION_TIMEOUT_SECONDS = 60
 
 oww_model = Model(
     wakeword_models=["hey_jarvis"]
 )
 
-vosk_model = VoskModel("vosk-model-small-en-us-0.15")
+vosk_model = VoskModel("vosk-model-en-us-0.22")
 recognizer = KaldiRecognizer(vosk_model, SAMPLE_RATE)
 
 audio_queue = queue.Queue()
@@ -30,7 +33,7 @@ def callback(indata, frames, time_info, status):
 
 def jarvis_status():
     try:
-        response = requests.get("http://127.0.0.1:5000/status", timeout=2)
+        response = requests.get("https://127.0.0.1:5000/status", timeout=2, verify=False)
         return response.json()
     except Exception as e:
         print("Status fetch failed:", e)
@@ -70,8 +73,9 @@ with sd.RawInputStream(
 
                 try:
                     requests.get(
-                        "http://127.0.0.1:5000/set_status/Listening...",
-                        timeout=2
+                        "https://127.0.0.1:5000/set_status/Listening...",
+                        timeout=2,
+                        verify=False
                     )
                 except Exception as e:
                     print("Status update failed:", e)
@@ -95,8 +99,9 @@ with sd.RawInputStream(
 
                     try:
                         requests.get(
-                            "http://127.0.0.1:5000/set_status/Listening...",
-                            timeout=2
+                            "https://127.0.0.1:5000/set_status/Listening...",
+                            timeout=2,
+                            verify=False
                         )
                     except Exception as e:
                         print("Timeout reset failed:", e)
@@ -115,11 +120,11 @@ with sd.RawInputStream(
 
                     try:
                         url = (
-                            "http://127.0.0.1:5000/simulate_heard/"
+                            "https://127.0.0.1:5000/simulate_heard/"
                             + text.replace(" ", "_")
                         )
 
-                        requests.get(url, timeout=2)
+                        requests.get(url, timeout=2, verify=False)
 
                         print("Command sent")
 

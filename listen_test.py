@@ -5,7 +5,7 @@ import requests
 from vosk import Model, KaldiRecognizer
 
 # Load Vosk model
-model = Model("vosk-model-small-en-us-0.15")
+model = Model("vosk-model-en-us-0.22")
 
 samplerate = 16000
 q = queue.Queue()
